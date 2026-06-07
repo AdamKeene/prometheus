@@ -59,7 +59,8 @@ type RulesPageData = {
 const buildRulesPageData = (
   data: RulesResult,
   search: string,
-  healthFilter: (string | null)[]
+  healthFilter: (string | null)[],
+  stateFilter: (string | null)[]
 ): RulesPageData => {
   const groups = data.groups.map((group) => ({
     ...group,
@@ -68,8 +69,10 @@ const buildRulesPageData = (
       ? group.rules
       : kvSearch.filter(search, group.rules).map((value) => value.original)
     ).filter(
-      (r) => healthFilter.length === 0 || healthFilter.includes(r.health)
-    ),
+        (r) => healthFilter.length === 0 || healthFilter.includes(r.health)
+    ).filter(
+        (r) => stateFilter.length === 0 || (r.type === "alerting" && stateFilter.includes(r.state))
+      ),
   }));
 
   return { groups };
@@ -93,6 +96,7 @@ const healthBadgeClass = (state: string) => {
 // a different reference on each render and causes subsequent memoized
 // computations to re-run as long as no health filter is selected.
 const emptyHealthFilter: string[] = [];
+const emptyStateFilter: string[] = [];
 
 export default function RulesPage() {
   const { data } = useSuspenseAPIQuery<RulesResult>({ path: `/rules` });
@@ -101,6 +105,10 @@ export default function RulesPage() {
   const [healthFilter, setHealthFilter] = useQueryParam(
     "health",
     withDefault(ArrayParam, emptyHealthFilter)
+  );
+  const [stateFilter, setStateFilter] = useQueryParam(
+    "state",
+    withDefault(ArrayParam, emptyStateFilter)
   );
   const [searchFilter, setSearchFilter] = useQueryParam(
     "search",
@@ -120,8 +128,8 @@ export default function RulesPage() {
 
   // Update the page data whenever the fetched data or filters change.
   const rulesPageData = useMemo(
-    () => buildRulesPageData(data.data, debouncedSearch, healthFilter),
-    [data, healthFilter, debouncedSearch]
+    () => buildRulesPageData(data.data, debouncedSearch, healthFilter, stateFilter),
+    [data, healthFilter, stateFilter, debouncedSearch]
   );
 
   const shownGroups = useMemo(
@@ -347,6 +355,19 @@ export default function RulesPage() {
           placeholder="Filter by rule health"
           values={(healthFilter?.filter((v) => v !== null) as string[]) || []}
           onChange={(values) => setHealthFilter(values)}
+        />
+        <StateMultiSelect
+          options={["firing", "pending", "inactive"]}
+          optionClass={(o) =>
+            o === "firing"
+              ? badgeClasses.healthErr
+              : o === "pending"
+                ? badgeClasses.healthWarn
+                : badgeClasses.healthOk
+          }
+          placeholder="Filter by alert state"
+          values={(stateFilter?.filter((v) => v !== null) as string[]) || []}
+          onChange={(values) => setStateFilter(values)}
         />
         <TextInput
           flex={1}
